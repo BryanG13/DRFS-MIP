@@ -3,12 +3,17 @@ cmake_minimum_required(VERSION 3.22)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+ set(CMAKE_BUILD_TYPE Debug)
 # Only set default build type if none specified
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 cmake_policy(SET CMP0144 NEW)
 cmake_policy(SET CMP0167 NEW)
+
+# ingnore deprecation warnings
+add_compile_options(-Wno-deprecated-declarations)
 
 # Only enable AddressSanitizer for Debug builds --> this helps finding memory issues 
 if(CMAKE_BUILD_TYPE MATCHES "Debug")
@@ -25,6 +30,13 @@ link_libraries(${OpenMP_CXX_LIBRARIES})
 # Threads 
 find_package(Threads REQUIRED)
 
+# CPLEX (for apple silicon)
+set(CPLEX_DIR /Applications/CPLEX_Studio2211)
+include_directories(${CPLEX_DIR}/cplex/include)
+include_directories(${CPLEX_DIR}/concert/include)
+link_directories(${CPLEX_DIR}/cplex/lib/arm64_osx/static_pic)
+link_directories(${CPLEX_DIR}/concert/lib/arm64_osx/static_pic)
+
 # Add any include file 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
@@ -37,6 +49,7 @@ add_executable(DRFS_MIP ${SRC_FILES})
 # Link libraries to executable 
 target_link_libraries(DRFS_MIP ${OpenMP_CXX_LIBRARIES})
 target_link_libraries(DRFS_MIP Threads::Threads)
+target_link_libraries(DRFS_MIP ilocplex cplex concert pthread m)
 
 # Set compiler flags 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")

@@ -1,0 +1,65 @@
+---------- Weight factors of the objective function -------- 
+
+c1: 0.25 	 (For travel-time of the buses)
+c2: 0.35 	 (For walking time of the passengers)
+c3: 0.4 	 (For the absolute difference in desired arrival time and actual arrival time of the passengers)
+
+---------------------- Parameters -------------------------- 
+
+Number of buses: 2
+Number of mandatory bus stops: 5
+Number optional bus stops per cluster: 3 
+ --> One cluster between each mandatory stop: 12 optional stops in total
+Total number of bus stops: 17
+Number of passenger requests: 10
+Bus capacity: 15 passengers
+Acceleration and deceleration time: 30 seconds
+Dwell time per passenger at a bus stop: 5 seconds
+Maximum walking time for any passenger: 1200 seconds
+Maximum amount of time a passenger can arrive too early: 900 seconds
+Maximum amount of time a passenger can arrive too late: 300 seconds
+
+Desired arrival times of the passengers in seconds: 
+p_1: 	7568.5
+p_2: 	7875.86
+p_3: 	8300.47
+p_4: 	7901.1
+p_5: 	7650.18
+p_6: 	8298.12
+p_7: 	7136.9
+p_8: 	8077.66
+p_9: 	7275.72
+p_10: 	7589.39
+
+Walking time between passengers and bus stops in seconds: 
+passengers correspond with the rows, bus stops correspond with the columns 
+the mandatory stops are listed first, then the optional stops are listed
+/	/	/	/	/	/	/	/	280	442	982	/	/	/	/	/	/	
+/	534	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	522	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	/	/	/	/	478	605	633	/	/	/	/	/	/	/	/	/	
+/	/	/	/	/	934	253	914	/	/	/	/	/	/	/	/	/	
+/	/	/	/	/	150	1087	195	/	/	/	/	/	/	/	/	/	
+/	/	/	/	/	/	/	/	547	502	/	/	/	/	/	/	/	
+/	/	/	/	/	/	/	/	566	156	847	/	/	/	/	/	/	
+/	816	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	/	/	/	/	/	/	/	477	412	357	/	/	/	/	/	/	
+
+Travel time between bus stops in seconds: 
+0	238	449	710	917	227	129	225	307	303	373	649	640	557	800	824	769	
+238	0	222	471	678	338	314	369	85	151	134	425	416	332	561	585	530	
+449	222	0	260	467	549	525	580	308	373	328	202	193	129	350	374	319	
+710	471	260	0	231	810	786	841	512	577	532	350	399	390	89	161	65	
+917	678	467	231	0	1017	992	1048	744	809	764	557	606	596	295	393	297	
+227	338	549	810	1017	0	97	31	407	403	473	459	413	420	899	924	868	
+129	314	525	786	992	97	0	95	383	379	448	520	511	427	875	899	844	
+225	369	580	841	1048	31	95	0	438	434	504	490	441	451	931	955	899	
+307	85	308	512	744	407	383	438	0	65	65	511	502	418	492	516	461	
+303	151	373	577	809	403	379	434	65	0	69	576	567	483	513	520	511	
+373	134	328	532	764	473	448	504	65	69	0	531	522	438	468	451	466	
+649	425	202	350	557	459	520	490	511	576	531	0	49	92	440	464	409	
+640	416	193	399	606	413	511	441	502	567	522	49	0	83	489	513	458	
+557	332	129	390	596	420	427	451	418	483	438	92	83	0	479	504	448	
+800	561	350	89	295	899	875	931	492	513	468	440	489	479	0	97	31	
+824	585	374	161	393	924	899	955	516	520	451	464	513	504	97	0	95	
+769	530	319	65	297	868	844	899	461	511	466	409	458	448	31	95	0	

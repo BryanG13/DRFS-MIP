@@ -8,7 +8,7 @@
         "name": "LNS",
         "type": "cppdbg",
         "request": "launch",
-        "program": "${workspaceFolder}/build/DRFS_LNS",
+        "program": "${workspaceFolder}/build/DRFS_MIP",
         "args": [],
         "stopAtEntry": false,
         "cwd": "${workspaceFolder}",
