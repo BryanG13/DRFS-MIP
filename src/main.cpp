@@ -179,7 +179,7 @@ int main() {
     inst << "Number optional bus stops per cluster: " << M << " \n --> One cluster between each mandatory stop: " + to_string((N - 1) * M) + " optional stops in total" << endl;
     const int Stations = (N - 1) * M + N; // amount of Stations
     inst << "Total number of bus stops: " << Stations << endl;
-    const int C = 10; // number of clients in opt horizon
+    const int C = 20; // number of clients in opt horizon
     inst << "Number of passenger requests: " << C << endl;
 
     const int bCapacity = 15; // Bus capcity

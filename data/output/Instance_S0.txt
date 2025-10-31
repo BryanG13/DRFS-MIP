@@ -11,7 +11,7 @@ Number of mandatory bus stops: 5
 Number optional bus stops per cluster: 3 
  --> One cluster between each mandatory stop: 12 optional stops in total
 Total number of bus stops: 17
-Number of passenger requests: 10
+Number of passenger requests: 20
 Bus capacity: 15 passengers
 Acceleration and deceleration time: 30 seconds
 Dwell time per passenger at a bus stop: 5 seconds
@@ -30,6 +30,16 @@ p_7: 	7136.9
 p_8: 	8077.66
 p_9: 	7275.72
 p_10: 	7589.39
+p_11: 	7572.92
+p_12: 	8809.46
+p_13: 	7368.5
+p_14: 	9075.86
+p_15: 	7300.47
+p_16: 	6901.1
+p_17: 	6650.18
+p_18: 	7298.12
+p_19: 	6568.5
+p_20: 	6875.86
 
 Walking time between passengers and bus stops in seconds: 
 passengers correspond with the rows, bus stops correspond with the columns 
@@ -44,6 +54,16 @@ the mandatory stops are listed first, then the optional stops are listed
 /	/	/	/	/	/	/	/	566	156	847	/	/	/	/	/	/	
 /	816	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
 /	/	/	/	/	/	/	/	477	412	357	/	/	/	/	/	/	
+/	50	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	/	/	/	/	/	/	/	575	619	151	/	/	/	/	/	/	
+/	/	/	/	/	/	/	/	756	801	273	/	/	/	/	/	/	
+/	742	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	91	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	1003	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	379	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
+/	/	/	/	/	/	/	/	779	/	797	/	/	/	/	/	/	
+/	/	/	/	/	/	/	/	744	/	940	/	/	/	/	/	/	
+/	534	/	/	/	/	/	/	/	/	/	/	/	/	/	/	/	
 
 Travel time between bus stops in seconds: 
 0	238	449	710	917	227	129	225	307	303	373	649	640	557	800	824	769	
