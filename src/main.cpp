@@ -4,23 +4,36 @@
 #include <iostream>
 #include <stdlib.h>
 
-void Gen(int N, int M, int C);
 using namespace std;
 
-// for cplex
+// CPLEX STL macros
 ILOSTLBEGIN
+
+// Subtour elimination callback (lazy constraint)
+// This callback inspects the current fractional/integer solution of the y variables
+// and detects cycles (subtours) in each bus route. When a subtour (cycle that
+// does not include the final mandatory station) is found, it adds a cut to
+// eliminate that subtour: sum(y_{k->j} for (k,j) in cycle) <= |cycle| - 1
+// Arguments:
+//  y        : 3D array y[i][j][k] indicating arc j->k used by bus i
+//  Stations : total number of stations
+//  nBuses   : number of buses
+//  N        : number of mandatory stops (first N entries are mandatory)
+//  C        : number of passengers (not used in callback but kept for signature)
 ILOLAZYCONSTRAINTCALLBACK5(SubtourEliminationCallback, IloArray<IloArray<IloBoolVarArray>>, y, int, Stations, int, nBuses, int, N, int, C) {
     int i, j, k, p, n;
-    vector<int> sta;
+    vector<int> sta; // list of optional/mandatory stations yet to explore
 
+    // Iterate over each bus and detect subtours in its current route
     for (i = 0; i < nBuses; i++) {
-        // std::cout << "---------------------------- bus " << i + 1 << endl;
-        // determine the stations visited in each bus
-        n = N;
+        // determine the stations visited in this bus according to current solution
+        n = N; // start counting with mandatory stops
         sta.clear();
+        // include mandatory stops 1..N-1 (indexing assumes 0 is origin)
         for (j = 1; j < N; j++) {
             sta.push_back(j);
         }
+        // check optional stops (those indexed >= N) and add ones used by this bus
         for (j = N; j < Stations; j++) {
             for (p = 0; p < Stations; p++) {
                 if (((int)getValue(y[i][j][p] + 0.001) == 1)) {
@@ -31,75 +44,50 @@ ILOLAZYCONSTRAINTCALLBACK5(SubtourEliminationCallback, IloArray<IloArray<IloBool
             }
         }
 
-        // cout << "----------------------------------------  n: " << n << endl;
-        /*
-        cout << " y-variable \n";
-        for (j = 0; j < Stations; j++) {
-                for (k = 0; k < Stations; k++) {
-                        cout << (int)getValue(y[i][j][k] + 0.001) << " ";
-                }
-                cout << endl;
-        }
-        //*/
-
+        // Arrays used for DFS-like traversal to identify cycles
         bool *seen = new bool[Stations];
         int *visited = new int[n + 1];
 
         memset(seen, false, sizeof(bool) * Stations);
         memset(visited, 0, sizeof(int) * n + 1);
         int length = 0;
-        k = 0;
-        seen[0] = true;
+        k = 0;          // start from station 0 (origin)
+        seen[0] = true; // mark origin visited
 
+        // Try to trace paths following arcs that are 'selected' in current solution
         while (true) {
             for (j = 0; j < Stations; j++) {
                 if (k != j) {
-                    // cout << k << ", " << j;
-                    // cout << " y=" <<(int)getValue(y[i][k][j] + 0.001) << endl;
+                    // if arc k->j is active in current solution
                     if (((int)getValue(y[i][k][j] + 0.001) == 1)) {
-                        // cout << "  ----------------------------- " << k << "-->" << j << endl;
+                        // record visiting this station
                         visited[++length] = j;
                         if (seen[j]) {
-                            // cout << "break \n";
+                            // Found a repeated node -> a cycle (subtour) candidate
                             break;
                         }
                         seen[j] = true;
-                        k = j;
-                        j = -1;
+                        k = j;  // continue from this new node
+                        j = -1; // reset inner loop to start scanning from 0
 
-                        for (p = 0; p < sta.size(); p++) {
-
+                        // remove visited station from the 'sta' list (stations to explore)
+                        for (p = 0; p < (int)sta.size(); p++) {
                             if (sta[p] == k) {
-                                /*
-                                for (int p1 = 0; p1 < sta.size(); p1++) {
-                                        cout << sta[p1] << " ";
-                                }
-                                cout << endl;
-                                cout << " erased " << sta[p] << endl;
-                                */
                                 sta.erase(sta.begin() + p);
-                                /*
-                                for (int p1 = 0; p1 < sta.size(); p1++) {
-                                        cout << sta[p1] << " ";
-                                }
-                                cout << endl;
-                                cout << " erased " << sta[p] << endl;
-                                */
                                 break;
                             }
                         }
                     }
                 }
             }
-            // cout << " done ----- \n";
-            if (length < n - 1 && /*k == N - 1*/ visited[0] != visited[length]) {
-                // cout << " choose 1 ----- \n";
-                // cout << "length: " << length << endl;
+
+            // heuristics to decide whether to continue exploring or reset search
+            if (length < n - 1 && visited[0] != visited[length]) {
+                // if there are still stations not covered, restart search from first remaining
                 if (n == N && length >= N - 1) {
                     break;
                 }
                 k = sta[0];
-                // cout << k << endl;
                 length = 0;
                 memset(seen, false, sizeof(bool) * Stations);
                 memset(visited, 0, sizeof(int) * n + 1);
@@ -107,15 +95,16 @@ ILOLAZYCONSTRAINTCALLBACK5(SubtourEliminationCallback, IloArray<IloArray<IloBool
                 seen[k] = true;
             }
             else if (length < n && length > 0 || sta.size() == 0) {
+                // finished exploring a connected component or no more stations left
                 break;
             }
             else if (length == 0) {
-                // cout << " choose 2 ----- \n";
+                // advance starting node if no progress was made
                 if (k < n - 1) {
                     k++;
                 }
                 else {
-                    length = n;
+                    length = n; // mark finished
                     break;
                 }
                 length = 0;
@@ -125,10 +114,10 @@ ILOLAZYCONSTRAINTCALLBACK5(SubtourEliminationCallback, IloArray<IloArray<IloBool
                 seen[k] = true;
             }
         }
-        // cout << "length: " <<length << endl;
+
+        // If a subtour (cycle) smaller than the full set was detected, add a cut
         int l0 = length;
         if (length > 0 && length < n - 1) {
-            // for (int ii = 0; ii < nBuses; ii++) {
             length = l0;
             IloExpr clique(getEnv());
             int firstjobinloop = visited[length];
@@ -136,96 +125,106 @@ ILOLAZYCONSTRAINTCALLBACK5(SubtourEliminationCallback, IloArray<IloArray<IloBool
             while (true) {
                 j = visited[length];
                 k = visited[--length];
-                // cout << "y_{ " << i << ", "<< k << ", " << j<< "}";
+                // accumulate y variables that form the cycle
                 clique += y[i][k][j];
                 newlen++;
                 if (k == firstjobinloop) {
                     break;
                 }
-                // cout << " + ";
             }
-            // cout << " <=  " << newlen - 1 << endl;
+            // add the subtour elimination cut: sum(y in cycle) <= |cycle| - 1
             add(clique <= newlen - 1).end();
             clique.end();
-            //}
         }
         delete[] seen;
         delete[] visited;
-        // exit(0);
     }
 
     return;
 }
 
 int main() {
+    // Instance counter used only for naming the instance file (useful when
+    // generating multiple instances in a single run). Here it's fixed to 0.
     int instance = 0;
     ofstream inst("data/output/Instance_S" + to_string(instance) + ".txt");
-    inst << "---------- Weight factors of the objective function -------- \n"<< endl;
-    // WEIGHT FACTORS--------------------------------------------------------------------------
-    float c1 = 0.25f;
+    inst << "---------- Weight factors of the objective function -------- \n" << endl;
+
+    // ------------------------------------------------------------------
+    // Objective weights: these scale the different components of the cost
+    // c1: bus travel + dwell time, c2: passenger walking, c3: arrival deviation
+    // ------------------------------------------------------------------
+    float c1 = 0.25f; // weight for bus travel time
     inst << "c1: " << c1 << " \t (For travel-time of the buses)" << endl;
-    float c2 = 0.35f;
+    float c2 = 0.35f; // weight for passenger walking time
     inst << "c2: " << c2 << " \t (For walking time of the passengers)" << endl;
-    float c3 = 1 - c1 - c2;
+    float c3 = 1 - c1 - c2; // remaining weight for arrival time deviation
     inst << "c3: " << c3 << " \t (For the absolute difference in desired arrival time and actual arrival time of the passengers)" << endl;
-    float lvsea = 1;
+    float lvsea = 1; // linearization/weight for early/late (used in waiting term)
+
     inst << "\n---------------------- Parameters -------------------------- \n" << endl;
-    // Define parameters-----------------------------------------------------------------------
-    const int nBuses = 2; // amount of buses available
+
+    // -------------------- Problem parameters -----------------------
+    // These are example (default) values. You can change them or load
+    // from a configuration file if desired.
+    const int nBuses = 2; // number of available buses
     inst << "Number of buses: " << nBuses << endl;
-    const int N = 5; // number of mandatory stations
+    const int N = 5; // number of mandatory stations (these must be visited in order)
     inst << "Number of mandatory bus stops: " << N << endl;
-    const int M = 3; // number of stations in cluster
+    const int M = 3; // number of optional stops in each inter-mandatory cluster
     inst << "Number optional bus stops per cluster: " << M << " \n --> One cluster between each mandatory stop: " + to_string((N - 1) * M) + " optional stops in total" << endl;
-    const int Stations = (N - 1) * M + N; // amount of Stations
+    const int Stations = (N - 1) * M + N; // total number of stations (mandatory + optional)
     inst << "Total number of bus stops: " << Stations << endl;
-    const int C = 20; // number of clients in opt horizon
+    const int C = 20; // number of passenger requests
     inst << "Number of passenger requests: " << C << endl;
 
-    const int bCapacity = 15; // Bus capcity
+    // -------------------- Physical / time parameters ----------------
+    const int bCapacity = 15; // bus capacity (passengers)
     inst << "Bus capacity: " << bCapacity << " passengers" << endl;
-    const float pspeed = 1.0f;         // passengers speed in meter per scond
-    const float bspeed = 40.0f / 3.6f; // bus speed in m/s
-    const int delta = 30;              // acceleration and deceleration time  in seconds
+    const float pspeed = 1.0f;         // passenger walking speed (m/s)
+    const float bspeed = 40.0f / 3.6f; // bus speed (40 km/h converted to m/s)
+    const int delta = 30;              // per-arc acceleration/deceleration overhead (s)
     inst << "Acceleration and deceleration time: " << delta << " seconds" << endl;
-    const int tau = 5; // dwell time coeficient in seconds
+    const int tau = 5; // dwell time per boarding/alighting passenger (s)
     inst << "Dwell time per passenger at a bus stop: " << tau << " seconds" << endl;
-    const int d = 20 * 60; // threshold of individual walking time in sec
+    const int d = 20 * 60; // maximum allowed walking time (seconds)
     inst << "Maximum walking time for any passenger: " << d << " seconds" << endl;
-    const int d_time1 = 15 * 60;
-    const int d_time2 = 5 * 60;
+    const int d_time1 = 15 * 60; // max early arrival tolerance (s)
+    const int d_time2 = 5 * 60;  // max late arrival tolerance (s)
     inst << "Maximum amount of time a passenger can arrive too early: " << d_time1 << " seconds" << endl;
     inst << "Maximum amount of time a passenger can arrive too late: " << d_time2 << " seconds" << endl;
-    // const int M0 = 10000; // Big M
 
-    // Gen(N, M, C); // to generate locations
-
-    // Read in locations
+    // -------------------- Read input data (format expectations) -------
+    // - data/input/passengers.txt : C rows of "x y" coordinates (meters or km consistent with speed)
+    // - data/input/mandatory.txt : N rows of mandatory stop coordinates
+    // - data/input/optional.txt  : (N-1)*M rows with optional stop coordinates
+    // - data/input/arrivals.txt  : C desired arrival times (seconds)
     double passengers[C][2];
-    ifstream filep("data/input/passengers.txt"); // Passengers
+    ifstream filep("data/input/passengers.txt"); // passenger coordinates
     int i = 0;
     while (i < C) {
-        filep >> passengers[i][0] >> passengers[i][1]; // extracts 2 floating point values seperated by whitespace
+        // each line: two floating point values (x y)
+        filep >> passengers[i][0] >> passengers[i][1];
         i++;
     }
 
-    double mandatory[N][2]; // mandatory Stations
+    double mandatory[N][2];
     ifstream filem("data/input/mandatory.txt");
     i = 0;
     while (i < N) {
-        filem >> mandatory[i][0] >> mandatory[i][1]; // extracts 2 floating point values seperated by whitespace
+        filem >> mandatory[i][0] >> mandatory[i][1];
         i++;
     }
 
-    double optional[(N - 1) * M][2]; // optinal stations
+    double optional[(N - 1) * M][2];
     ifstream fileo("data/input/optional.txt");
     i = 0;
     while (i < (N - 1) * M) {
-        fileo >> optional[i][0] >> optional[i][1]; // extracts 2 floating point values seperated by whitespace
+        fileo >> optional[i][0] >> optional[i][1];
         i++;
     }
 
-    // Arrival times of the passengers
+    // Arrival times (desired) for passengers, in seconds
     double arrivals[C];
     ifstream filea("data/input/arrivals.txt");
     inst << endl
@@ -237,20 +236,25 @@ int main() {
         i++;
     }
 
-    // calculate travel time using manhattan distance
-    double traveltimep[C][Stations];        // travel times of people between passangers and stations
-    double traveltimes[Stations][Stations]; // travel times of buses between stations
+    // -------------------- Compute travel times -----------------------
+    // traveltimep[p][j] : walking time (seconds) for passenger p to station j
+    // traveltimes[j][k] : bus travel time (seconds) between station j and k
+    double traveltimep[C][Stations];
+    double traveltimes[Stations][Stations];
+
+    // Compute walking times using Manhattan distance scaled to seconds.
     for (int i = 0; i < C; i++) {
         for (int j = 0; j < N; j++) {
             traveltimep[i][j] = d / 20.0 / 60.0 * (abs(passengers[i][0] - mandatory[j][0]) + abs(passengers[i][1] - mandatory[j][1])) * 1000 / pspeed;
         }
-
         for (int j = N; j < Stations; j++) {
             traveltimep[i][j] = d / 20.0 / 60.0 * (abs(passengers[i][0] - optional[j - N][0]) + abs(passengers[i][1] - optional[j - N][1])) * 1000 / pspeed;
         }
     }
 
-    inst << "\nWalking time between passengers and bus stops in seconds: " << "\npassengers correspond with the rows, bus stops correspond with the columns \nthe mandatory stops are listed first, then the optional stops are listed" << endl;
+    // Pretty-print walking matrix (filtered by threshold/min heuristics)
+    inst << "\nWalking time between passengers and bus stops in seconds: "
+         << "\npassengers correspond with the rows, bus stops correspond with the columns \nthe mandatory stops are listed first, then the optional stops are listed" << endl;
     for (int i = 0; i < C; i++) {
         double minp = 10000000000;
         for (int k = 0; k < N; k++) {
@@ -259,6 +263,7 @@ int main() {
             }
         }
         for (int j = 0; j < Stations; j++) {
+            // show '/' for stations that are too far or dominated by a closer mandatory stop
             if (traveltimep[i][j] > d || (j > N && traveltimep[i][j] > minp)) {
                 inst << "/\t";
             }
@@ -269,6 +274,7 @@ int main() {
         inst << endl;
     }
 
+    // Bus travel times (Manhattan) between all station pairs
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
             traveltimes[i][j] = (abs(mandatory[i][0] - mandatory[j][0]) + abs(mandatory[i][1] - mandatory[j][1])) * 1000 / bspeed;
@@ -277,7 +283,6 @@ int main() {
             traveltimes[i][j] = (abs(mandatory[i][0] - optional[j - N][0]) + abs(mandatory[i][1] - optional[j - N][1])) * 1000 / bspeed;
         }
     }
-
     for (int i = N; i < Stations; i++) {
         for (int j = 0; j < N; j++) {
             traveltimes[i][j] = (abs(optional[i - N][0] - mandatory[j][0]) + abs(optional[i - N][1] - mandatory[j][1])) * 1000 / bspeed;
@@ -294,9 +299,9 @@ int main() {
         inst << endl;
     }
     inst.close();
-    // exit(0);
 
-    // define sets----------------------------------------------------------------------------------------------
+    // -------------------- Build index sets (simple integer arrays) ------
+    // These arrays are convenience iterables later used with range-based for loops.
     int I[nBuses];
     int J[Stations];
     int F[N];
@@ -320,10 +325,11 @@ int main() {
 
     double elapsed_time;
     clock_t start_time;
-
     start_time = clock();
 
-    // earliest and latest arrival times
+    // -------------------- Big-M and time bounds -------------------------
+    // Earliest and latest requested arrival times are used to compute a
+    // safe upper bound (Big-M) for time linking constraints below.
     double EA = 10000000000, LA = -1;
     for (int p = 0; p < C; p++) {
         if (EA > arrivals[p]) {
@@ -333,15 +339,21 @@ int main() {
             LA = arrivals[p];
         }
     }
-
+    // M_1 is a conservative upper bound on time differences used in logical constraints
     int M_1 = (int)(LA + d_time2 - EA + d_time1) + 1;
 
-    //*************************************************|| MODEL || ***********************************************************************
+    // *************************************************|| MODEL || ***************************************************************
+    // Create CPLEX environment and model container
     IloEnv env;
     IloModel model(env);
 
-    // VARIBLES-----------------------------------------------------------
-    IloArray<IloArray<IloBoolVarArray>> x(env); // x variable
+    // -------------------- Decision variables ---------------------------
+    // x[p][i][j] : binary, passenger p assigned to bus i at station j
+    // y[i][j][k] : binary, bus i travels from station j to k
+    // D[i]       : continuous, bus start time
+    // A[p]       : continuous, actual arrival time for passenger p
+    // q_early/q_late : non-negative slacks for early/late arrival
+    IloArray<IloArray<IloBoolVarArray>> x(env);
     for (int p = 0; p < C; p++) {
         IloArray<IloBoolVarArray> x1(env);
         for (int i = 0; i < nBuses; i++) {
@@ -350,7 +362,7 @@ int main() {
         x.add(x1);
     }
 
-    IloArray<IloArray<IloBoolVarArray>> y(env); // y variable
+    IloArray<IloArray<IloBoolVarArray>> y(env);
     for (int i = 0; i < nBuses; i++) {
         IloArray<IloBoolVarArray> y1(env);
         for (int j = 0; j < Stations; j++) {
@@ -359,12 +371,12 @@ int main() {
         y.add(y1);
     }
 
-    IloNumVarArray D(env);             // Di variable
-    for (int i = 0; i < nBuses; i++) { // D
+    IloNumVarArray D(env); // bus start times
+    for (int i = 0; i < nBuses; i++) {
         D.add(IloNumVar(env, 0, INFINITY));
     }
 
-    IloNumVarArray A(env); // Ap variable
+    IloNumVarArray A(env); // passenger actual arrival times
     for (int i = 0; i < C; i++) {
         A.add(IloNumVar(env, 0, INFINITY));
     }
@@ -377,7 +389,8 @@ int main() {
         q_late.add(IloNumVar(env, 0, INFINITY));
     }
 
-    // OBJECTIVE -------------------------------------------------------
+    // -------------------- Objective construction -----------------------
+    // TravelTime: bus travel and dwell times
     IloExpr TravelTime(env);
     for (int i = 0; i < nBuses; i++) {
         for (int j = 0; j < Stations; j++) {
@@ -385,32 +398,35 @@ int main() {
                 TravelTime += y[i][j][k] * (traveltimes[j][k] + delta);
             }
             for (int p = 0; p < C; p++) {
-                TravelTime += x[p][i][j] * tau;
+                TravelTime += x[p][i][j] * tau; // dwell contributions
             }
         }
     }
 
+    // WalkingTime: passenger walking time to assigned station
     IloExpr WalkingTime(env);
     for (int p = 0; p < C; p++) {
         for (int i = 0; i < nBuses; i++) {
             for (int j = 0; j < Stations; j++) {
-                WalkingTime += x[p][i][j] * (traveltimep[p][j]);
+                WalkingTime += x[p][i][j] * traveltimep[p][j];
             }
         }
     }
 
+    // WaitingTime: penalty for arriving early/late (linearized using q_early/q_late)
     IloExpr WaitingTime(env);
     for (int p = 0; p < C; p++) {
         WaitingTime += lvsea * q_late[p] + q_early[p];
     }
 
+    // Full objective: weighted sum
     model.add(IloMinimize(env, c1 * TravelTime + c2 * WalkingTime + c3 * WaitingTime));
     TravelTime.end();
     WaitingTime.end();
     WalkingTime.end();
 
-    // CONSTRAINTS-------------------------------------------------------
-
+    // -------------------- CONSTRAINTS ------------------------
+    
     // ROUTING ******
 
     // one arc at most going out the optional stops
@@ -487,33 +503,6 @@ int main() {
             }
         }
     }
-
-    /*
-    //Subtour elimination
-    int  count = pow(2, Stations); // number of subsets
-    for (int i = 0; i < nBuses; i++) {
-            for (int s = 0; s < count; s++) {// This loop will generate a subset
-                    IloExpr Ysum(env);
-                    int S = 0;
-                    for (int j = 0; j < Stations; j++) {
-                            // This if condition will check if jth bit in binary representation of  s  is set or not
-                            // if the value of (i & (1 << j)) is greater than 0 , include y var in the current subset
-                            // otherwise exclude it
-                            if ((s & (1 << j)) > 0) {
-                                    S++;
-                                    for (int k = 0; k < Stations; k++) {
-                                            if ((s & (1 << k)) > 0)
-                                                    Ysum += y[i][j][k];
-                                    }
-                            }
-                    }
-                    if (2<= S && S<=Stations-1) {
-                            model.add(Ysum <= S - 1);
-                    }
-                    Ysum.end();
-            }
-    }
-    /*/
 
     // ASSIGNMENT ******
 
@@ -611,32 +600,6 @@ int main() {
         model.add(arrivals[p] - A[p] + q_late[p] - q_early[p] == 0);
     }
 
-    /*
-
-    int minbus = nBuses * bCapacity;
-    int minpass = C;
-    for (const auto& i : I) {
-            if (minpass - bCapacity > 0) {
-                    minbus -= bCapacity;
-                    minpass -= bCapacity;
-            }
-            else {
-                    minbus = i;
-                    break;
-            }
-    }
-    for (i = 0; i < minbus; i++) {
-            IloExpr sumX(env);
-            for (const auto& j : J) {
-                    for (const auto& p : P) {
-                            sumX += x[p][i][j];
-                    }
-            }
-            model.add(sumX >= minpass);
-            sumX.end();
-    }
-    */
-
     // Bus capacity
     for (const auto &i : I) {
         IloExpr sumX(env);
@@ -649,31 +612,58 @@ int main() {
         sumX.end();
     }
 
-    // SOLVE----------------------------------------------------
+    // SOLVE ----------------------------------------------------
+    // Configure and run the CPLEX solver. A few solver params are shown
+    // commented-out below for easy tuning (gap, emphasis, time limit, etc.).
     IloCplex cplex(model);
+    // Suppress solver output if desired:
     // cplex.setOut(env.getNullStream());
+    // Stop earlier by setting acceptable optimality gap (e.g., 1%):
     // cplex.setParam(IloCplex::EpGap, 0.01);
+    // Change solver focus/emphasis (3 is aggressive towards feasible solutions):
     // cplex.setParam(IloCplex::MIPEmphasis, 3);
+    // Set number of threads (adjust to your machine):
     cplex.setParam(cplex.Threads, 12);
+
+    // Install lazy constraint callback for subtour elimination. This callback
+    // dynamically adds constraints during the branch-and-cut search to remove
+    // infeasible subtours found in intermediate solutions.
     cplex.use(SubtourEliminationCallback(env, y, Stations, nBuses, N, C));
+
+    // Optional time limit (seconds):
     // cplex.setParam(cplex.TiLim,3610);
+
+    // Solve the model (blocking call). The callback will be invoked
+    // internally by CPLEX when nodes are explored.
     cplex.solve();
+
+    // Record elapsed CPU time for profiling/logging
     elapsed_time = (double)(clock() - start_time) / CLK_TCK;
     std::cout << "Computational time: " << elapsed_time << " seconds\n" << endl;
 
-	// Get objective function value 
+    // Retrieve objective value after solve
     double objval = cplex.getObjValue();
 
+    // ------------------ Extract solution values ------------------
+    // Local containers to store the (binary/integer) solution values read from CPLEX.
+    // xsol[p][i][j] : passenger p assigned to bus i at station j (0/1)
     int xsol[C][nBuses][Stations];
     ofstream txt_xsol("data/output/xsol.txt");
+
+    // ysol[i][j][k] : bus i travels from station j to station k (0/1)
     int ysol[nBuses][Stations][Stations];
     ofstream txt_ysol("data/output/ysol.txt");
+
+    // Dsol: bus start times, Asol: passenger actual arrival times
     double Dsol[nBuses];
     ofstream txt_Dsol("data/output/Dsol.txt");
     double Asol[C];
     ofstream txt_Asol("data/output/Asol.txt");
 
+    // Populate the local arrays by querying CPLEX. A small numeric tolerance
+    // is used when converting floating point solver values to integers.
     for (int i = 0; i < nBuses; i++) {
+        // continuous start time
         Dsol[i] = cplex.getValue(D[i]);
         txt_Dsol << Dsol[i] << endl;
 
@@ -681,10 +671,12 @@ int main() {
         txt_ysol << "Bus " << i << endl;
         for (int j = 0; j < Stations; j++) {
             for (int k = 0; k < Stations; k++) {
+                // routing decisions
                 ysol[i][j][k] = (int)cplex.getValue(y[i][j][k] + 0.001);
                 txt_ysol << ysol[i][j][k] << " ";
             }
             for (int p = 0; p < C; p++) {
+                // passenger assignments
                 xsol[p][i][j] = (int)cplex.getValue(x[p][i][j] + 0.001);
                 txt_xsol << xsol[p][i][j] << " ";
             }
@@ -695,11 +687,13 @@ int main() {
         txt_ysol << "end" << endl;
     }
 
+    // Passenger arrival times
     for (int p = 0; p < C; p++) {
         Asol[p] = cplex.getValue(A[p]);
         txt_Asol << Asol[p] << endl;
     }
 
+    // Close files used to dump solver outputs
     txt_xsol.close();
     txt_ysol.close();
     txt_Asol.close();
@@ -707,14 +701,12 @@ int main() {
 
     env.end();
 
-    cout << endl;
-
-    cout << " Solution is : " << objval << endl;
+    cout << "\n********************************\nSolution is : " << objval <<  "s\n********************************\n" << endl;
 
     cout << " Bus starting times in seconds -------- " << endl;
 
     for (int i = 0; i < nBuses; i++) {
-        cout << "Bus " << i << "--> " << Dsol[i] << endl;
+        cout << "Bus " << i << "--> " << Dsol[i] <<  "s" << endl;
     }
 
     cout << endl;
@@ -722,35 +714,44 @@ int main() {
     cout << " Early times in seconds  --------- " << endl;
     double AD = 0;
     for (int p = 0; p < C; p++) {
-        cout << "Passeger " << p << " --> " << arrivals[p] - Asol[p] << endl;
+        cout << "Passeger " << p << " --> " << arrivals[p] - Asol[p] << "s" <<  endl;
         AD += abs(arrivals[p] - Asol[p]);
     }
 
+    // ------------------ Write visits (timetable) ------------------
+    // For each bus, follow the selected arcs (ysol) starting from node 0
+    // until reaching the final mandatory stop (index N-1). At each station
+    // record the time when the bus arrives.
     ofstream txt_visits("data/output/visits.txt");
     int j = 0;
     double travel = 0, travelp = 0;
     for (int i = 0; i < nBuses; i++) {
-        j = 0;
-        travel = Dsol[i];
+        j = 0;            // start at station 0
+        travel = Dsol[i]; // initial time is the bus start time
         txt_visits << "Bus " << i + 1 << endl;
+        // follow the route until the last mandatory station
         while (j != N - 1) {
             for (int k = 0; k < Stations; k++) {
                 if (ysol[i][j][k] == 1) {
+                    // record visit: station index and arrival time
                     txt_visits << j << " " << travel << endl;
+                    // add travel time for arc and dwell times from passengers
                     travel += (traveltimes[j][k] + delta);
                     for (int p = 0; p < C; p++) {
                         travel += xsol[p][i][j] * tau;
                     }
-                    j = k;
+                    j = k; // advance to next station
                 }
             }
         }
+        // final station visit
         txt_visits << j << " " << travel << endl;
-        cout << j << endl;
         txt_visits << "end" << endl;
     }
     txt_visits.close();
 
+    // ------------------ Walking output ------------------
+    // For each passenger, find the assigned station and write the walking time
     double W = 0;
     ofstream txt_walking("data/output/walking.txt");
     for (int p = 0; p < C; p++) {
@@ -765,6 +766,10 @@ int main() {
     }
     txt_walking.close();
 
+    // ------------------ Aggregate passenger trip times ------------------
+    // travelp is the total bus route time experienced by passengers. For each
+    // passenger, find their boarding station and sum the bus travel and dwell
+    // times from that station to the final mandatory stop.
     for (int p = 0; p < C; p++) {
         for (int i = 0; i < nBuses; i++) {
             for (int l = 0; l < Stations; l++) {
@@ -787,18 +792,9 @@ int main() {
         }
         travelp += travel;
     }
-    cout << " AD: " << AD << endl;
-    cout << " T: " << travelp << endl;
-    cout << " W: " << W << endl;
+
+    // Print aggregated metrics: absolute deviation (AD), total passenger travel time (T), total walking (W)
+    cout << "\n----------------------\n- Absolute deviation (AD): " << AD <<  "s" << endl;
+    cout << "- Total passenger travel time (T): " << travelp <<  "s" << endl;
+    cout << "- Total walking (W): " << W <<  "s" << endl;
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started:
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
