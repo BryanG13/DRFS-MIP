@@ -1,6 +1,6 @@
-# DRFS-MIP
+# DRFS-LNS: Demand-Responsive Feeder Service - MIP 
 
-C++ implementation of a demand-responsive feeder scheduling model using Mixed Integer Programming (MIP). The MIp is solved using CPLEX. 
+C++ implementation of a demand-responsive feeder scheduling model using Mixed Integer Programming (MIP) with lazy constraints. The MIP is solved using CPLEX. 
 
 ## Overview
 
